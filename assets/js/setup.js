@@ -1,51 +1,45 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'rbx_page_config';
+  var STORAGE_KEY  = 'rbx_page_config';
+  var LOADING_KEY  = 'rbx_loading_after_reload';
 
-  /* ═══════════════════════════════════════════
-     LOADING OVERLAY — etapas visuais
-  ═══════════════════════════════════════════ */
-  function showPageLoader() {
+  /* ═══════════════════════════
+     LOADING OVERLAY HELPERS
+  ═══════════════════════════ */
+  function showLoader() {
     var el = document.getElementById('page-loading-overlay');
     if (el) el.classList.add('active');
   }
-
-  function hidePageLoader() {
+  function hideLoader() {
     var el = document.getElementById('page-loading-overlay');
     if (!el) return;
     el.classList.add('fade-out');
-    setTimeout(function () {
-      el.classList.remove('active');
-      el.classList.remove('fade-out');
-    }, 550);
+    setTimeout(function () { el.classList.remove('active', 'fade-out'); }, 600);
   }
-
-  function setStep(index, state) {
-    /* state: 'active' | 'done' */
+  function setStep(i, state) {
     var steps = document.querySelectorAll('.plo-step');
-    if (steps[index]) {
-      steps[index].classList.remove('active', 'done');
-      steps[index].classList.add(state);
+    if (steps[i]) {
+      steps[i].classList.remove('active', 'done');
+      steps[i].classList.add(state);
     }
   }
 
-  /* ═══════════════════════════════════════════
-     APPLY CONFIG
-  ═══════════════════════════════════════════ */
-  function applyConfig(cfg, onDone) {
+  /* ═══════════════════════════
+     APPLY TEXT REPLACEMENTS
+     (avatar/robux handled by
+      head interceptor)
+  ═══════════════════════════ */
+  function applyTextAndAvatar(cfg) {
     var username    = cfg.username;
     var displayname = cfg.displayname || username;
     var userId      = cfg.userId;
-    var robuxRaw    = parseInt(cfg.robux, 10) || 0;
-    var robuxFmt    = robuxRaw.toLocaleString('pt-BR');
+    var robuxFmt    = (parseInt(cfg.robux, 10) || 0).toLocaleString('pt-BR');
     var avatarUrl   =
       'https://www.roblox.com/headshot-thumbnail/image?userId=' +
       userId + '&width=150&height=150&format=png';
 
-    /* ── Etapa 1: atualiza meta e substitui textos ── */
-    setStep(0, 'active');
-
+    /* Update meta */
     var meta = document.querySelector('meta[name="user-data"]');
     if (meta) {
       meta.setAttribute('data-userid', userId);
@@ -53,196 +47,110 @@
       meta.setAttribute('data-displayname', displayname);
     }
 
+    /* Replace text nodes */
     function replaceText(root) {
       if (!root) return;
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
       var node;
       while ((node = walker.nextNode())) {
         var v = node.nodeValue;
-        if (!v) continue;
-        var n = v
-          .replace(/Frost_Lychen/g, username)
-          .replace(/\bFrost\b/g, displayname);
+        if (!v || v.trim() === '') continue;
+        var n = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, displayname);
         if (n !== v) node.nodeValue = n;
       }
     }
 
-    replaceText(document.body);
-
-    setTimeout(function () {
-      setStep(0, 'done');
-
-      /* ── Etapa 2: substitui avatar ── */
-      setStep(1, 'active');
-
-      function replaceNavAvatar() {
-        var nav = document.getElementById('navigation-container') ||
-                  document.getElementById('header');
-        if (!nav) return false;
-        var imgs = nav.querySelectorAll('img');
-        if (imgs.length === 0) return false;
-
-        imgs.forEach(function (img) {
-          var src = img.getAttribute('src') || img.src || '';
-          var isThumb = src.indexOf('headshot') !== -1 ||
-                        src.indexOf('bust-thumbnail') !== -1 ||
-                        src.indexOf('avatar-thumbnail') !== -1 ||
-                        src.indexOf('thumbnails.roblox') !== -1 ||
-                        src.indexOf('5830442856') !== -1;
-          var isSmall = (img.offsetWidth < 80) || (img.width < 80) ||
-                        (img.offsetHeight < 80) || (img.height < 80);
-
-          if (isThumb || isSmall) {
-            img.src = avatarUrl;
-            img.style.borderRadius = '50%';
-            img.style.objectFit = 'cover';
-          }
-        });
-
-        /* Imagens com userId antigo em qualquer lugar */
-        document.querySelectorAll('img').forEach(function (img) {
-          var s = img.getAttribute('src') || '';
-          if (s.indexOf('5830442856') !== -1) {
-            img.src = s.replace(/5830442856/g, userId);
-          }
-        });
-
-        return true;
-      }
-
-      /* Tenta até o nav renderizar (máx 6 s) */
-      var avatarTries = 0;
-      function tryReplaceAvatar() {
-        var ok = replaceNavAvatar();
-        avatarTries++;
-        if (!ok && avatarTries < 30) {
-          setTimeout(tryReplaceAvatar, 200);
-        } else {
-          setStep(1, 'done');
-
-          /* ── Etapa 3: injeta saldo de Robux ── */
-          setStep(2, 'active');
-
-          function injectRobuxBalance() {
-            /* Seletores nativos do Roblox */
-            var targets = document.querySelectorAll(
-              '.nav-robux-amount, [data-testid="nav-robux-balance"], ' +
-              '[class*="robuxAmount"], [id*="robux-balance"], ' +
-              '.rbx-menu-item .robux-amount, .navbar-right .robux-amount'
-            );
-            if (targets.length > 0) {
-              targets.forEach(function (el) { el.textContent = robuxFmt; });
-              return true;
-            }
-
-            /* Fallback: badge ao lado do link "Robux" */
-            var robuxLink = document.querySelector(
-              'a[href*="upgrades/robux"], a.robux-menu-btn, ' +
-              '#navigation-robux-container a'
-            );
-            if (!robuxLink) return false;
-
-            if (robuxLink.parentElement.querySelector('.injected-robux-badge')) {
-              robuxLink.parentElement.querySelector('.injected-robux-badge').textContent = robuxFmt;
-              return true;
-            }
-
-            var badge = document.createElement('span');
-            badge.className = 'injected-robux-badge';
-            badge.style.cssText = [
-              'display:inline-flex', 'align-items:center', 'gap:4px',
-              'font-size:13px', 'font-weight:700', 'color:#fff',
-              'margin-left:6px', 'white-space:nowrap',
-              'background:rgba(0,0,0,0.35)', 'border-radius:10px',
-              'padding:2px 8px'
-            ].join(';');
-
-            var robuxIcon = document.createElement('img');
-            robuxIcon.src = 'https://images.rbxcdn.com/7a60e6e29fb3f9c3f6e5a4b8a3f6d0bc-Robux_Icon.png';
-            robuxIcon.style.cssText = 'width:14px;height:14px;vertical-align:middle';
-            robuxIcon.onerror = function () { this.style.display = 'none'; };
-
-            var txt = document.createElement('span');
-            txt.textContent = robuxFmt;
-
-            badge.appendChild(robuxIcon);
-            badge.appendChild(txt);
-            robuxLink.parentElement.appendChild(badge);
-            return true;
-          }
-
-          var robuxTries = 0;
-          function tryInjectRobux() {
-            var ok = injectRobuxBalance();
-            robuxTries++;
-            if (!ok && robuxTries < 20) {
-              setTimeout(tryInjectRobux, 300);
-            } else {
-              setStep(2, 'done');
-
-              /* ── Etapa 4: varredura final de textos ── */
-              setStep(3, 'active');
-              replaceText(document.body);
-              setTimeout(function () {
-                replaceText(document.body);
-                setStep(3, 'done');
-
-                /* ── Pronto: esconde loader ── */
-                setTimeout(hidePageLoader, 400);
-
-                /* Observer para conteúdo posterior */
-                var observer = new MutationObserver(function (muts) {
-                  muts.forEach(function (m) {
-                    m.addedNodes.forEach(function (node) {
-                      if (node.nodeType === 1) {
-                        replaceText(node);
-                        replaceNavAvatar();
-                      } else if (node.nodeType === 3) {
-                        var v = node.nodeValue;
-                        if (!v) return;
-                        var n = v
-                          .replace(/Frost_Lychen/g, username)
-                          .replace(/\bFrost\b/g, displayname);
-                        if (n !== v) node.nodeValue = n;
-                      }
-                    });
-                    if (m.type === 'attributes' && m.target.tagName === 'IMG') {
-                      var img = m.target;
-                      var nav = document.getElementById('navigation-container');
-                      if (nav && nav.contains(img)) {
-                        img.src = avatarUrl;
-                        img.style.borderRadius = '50%';
-                      }
-                    }
-                  });
-                });
-                observer.observe(document.body, {
-                  childList: true, subtree: true,
-                  attributes: true, attributeFilter: ['src']
-                });
-
-                /* Polling residual */
-                [1000, 2500, 5000].forEach(function (ms) {
-                  setTimeout(function () {
-                    replaceText(document.body);
-                    replaceNavAvatar();
-                    injectRobuxBalance();
-                  }, ms);
-                });
-
-                if (typeof onDone === 'function') onDone();
-
-              }, 400);
-            }
-          }
-          tryInjectRobux();
+    /* Force avatar in nav */
+    function forceNavAvatar() {
+      var nav = document.getElementById('navigation-container') || document.getElementById('header');
+      if (!nav) return;
+      nav.querySelectorAll('img').forEach(function (img) {
+        var s = img.getAttribute('src') || '';
+        if (
+          s.indexOf('headshot') !== -1 || s.indexOf('bust-thumbnail') !== -1 ||
+          s.indexOf('avatar-thumbnail') !== -1 || s.indexOf('thumbnails.roblox') !== -1 ||
+          s.indexOf('5830442856') !== -1
+        ) {
+          img.src = avatarUrl;
+          img.style.borderRadius = '50%';
+          img.style.objectFit = 'cover';
         }
+      });
+
+      /* Also catch any small images (avatar icon is usually < 60px) */
+      nav.querySelectorAll('img').forEach(function (img) {
+        var w = img.offsetWidth || img.width;
+        var h = img.offsetHeight || img.height;
+        if ((w > 0 && w < 80) || (h > 0 && h < 80)) {
+          img.src = avatarUrl;
+          img.style.borderRadius = '50%';
+          img.style.objectFit = 'cover';
+        }
+      });
+    }
+
+    /* Inject Robux badge near "Robux" nav link */
+    function injectRobuxBadge() {
+      /* Try native elements first */
+      var natives = document.querySelectorAll(
+        '.nav-robux-amount, [data-testid="nav-robux-balance"], [class*="robuxAmount"], [id*="robux-balance"]'
+      );
+      if (natives.length > 0) { natives.forEach(function(e){ e.textContent = robuxFmt; }); return; }
+
+      /* Fallback: inject next to the Robux nav link */
+      var link = document.querySelector('a.robux-menu-btn, #navigation-robux-container a[href*="robux"]');
+      if (!link) return;
+      if (link.querySelector('.rbx-injected-balance')) {
+        link.querySelector('.rbx-injected-balance').textContent = robuxFmt;
+        return;
       }
-      tryReplaceAvatar();
+      var badge = document.createElement('span');
+      badge.className = 'rbx-injected-balance';
+      badge.style.cssText =
+        'margin-left:5px;font-size:12px;font-weight:700;color:#fff;' +
+        'background:rgba(0,162,255,.18);border-radius:8px;padding:1px 7px;';
+      badge.textContent = robuxFmt;
+      link.appendChild(badge);
+    }
 
-    }, 300);
+    /* ─ Run immediately ─ */
+    replaceText(document.body);
+    forceNavAvatar();
+    injectRobuxBadge();
 
-    /* onerror em imgs do nav */
+    /* ─ Poll for lazy-rendered content ─ */
+    var tries = 0;
+    var poll = setInterval(function () {
+      replaceText(document.body);
+      forceNavAvatar();
+      injectRobuxBadge();
+      if (++tries >= 20) clearInterval(poll); /* stop after 10 s */
+    }, 500);
+
+    /* ─ MutationObserver ─ */
+    var obs = new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        m.addedNodes.forEach(function (node) {
+          if (node.nodeType === 1) { replaceText(node); forceNavAvatar(); injectRobuxBadge(); }
+          else if (node.nodeType === 3) {
+            var v = node.nodeValue;
+            if (!v) return;
+            var n = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, displayname);
+            if (n !== v) node.nodeValue = n;
+          }
+        });
+        if (m.type === 'attributes' && m.target.tagName === 'IMG') {
+          var nav = document.getElementById('navigation-container');
+          if (nav && nav.contains(m.target)) {
+            m.target.src = avatarUrl;
+            m.target.style.borderRadius = '50%';
+          }
+        }
+      });
+    });
+    obs.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['src'] });
+
+    /* onerror on nav imgs → force our avatar */
     document.addEventListener('error', function (e) {
       if (e.target.tagName !== 'IMG') return;
       var nav = document.getElementById('navigation-container');
@@ -253,15 +161,32 @@
     }, true);
   }
 
-  /* ═══════════════════════════════════════════
-     BUSCA usuário na API do Roblox
-  ═══════════════════════════════════════════ */
+  /* ═══════════════════════════
+     LOADING STEPS SEQUENCE
+  ═══════════════════════════ */
+  function runLoadingSequence(cfg) {
+    showLoader();
+    var steps = [0, 1, 2, 3];
+    var timings = [0, 600, 1200, 2000];
+
+    steps.forEach(function (i) {
+      setTimeout(function () { setStep(i, 'active'); }, timings[i]);
+      setTimeout(function () { setStep(i, 'done'); }, timings[i] + 500);
+    });
+
+    /* Apply replacements in background while loading shows */
+    setTimeout(function () { applyTextAndAvatar(cfg); }, 200);
+
+    /* Hide loader after all steps */
+    setTimeout(function () { hideLoader(); }, 2700);
+  }
+
+  /* ═══════════════════════════
+     FETCH USER (via proxy)
+  ═══════════════════════════ */
   function fetchUser(username, onSuccess, onError) {
-    fetch('https://users.roblox.com/v1/usernames/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usernames: [username], excludeBannedUsers: false })
-    })
+    /* Use our Vercel serverless proxy to avoid CORS */
+    fetch('/api/getuser?username=' + encodeURIComponent(username))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data.data || data.data.length === 0) { onError('not_found'); return; }
@@ -271,9 +196,9 @@
       .catch(function () { onError('network'); });
   }
 
-  /* ═══════════════════════════════════════════
-     UI helpers
-  ═══════════════════════════════════════════ */
+  /* ═══════════════════════════
+     UI HELPERS
+  ═══════════════════════════ */
   function showError(msg) {
     var el = document.getElementById('setup-error');
     if (el) { el.textContent = msg; el.style.display = 'block'; }
@@ -282,24 +207,20 @@
     var el = document.getElementById('setup-error');
     if (el) el.style.display = 'none';
   }
-  function setLoading(on) {
-    var load = document.getElementById('setup-loading');
-    var btn  = document.getElementById('setup-btn');
-    if (load) load.style.display = on ? 'block' : 'none';
-    if (btn)  btn.disabled = on;
+  function setBtnLoading(on) {
+    var l = document.getElementById('setup-loading');
+    var b = document.getElementById('setup-btn');
+    if (l) l.style.display = on ? 'block' : 'none';
+    if (b) b.disabled = on;
   }
   function closeModal() {
-    var overlay = document.getElementById('setup-overlay');
-    if (overlay) {
-      overlay.style.opacity = '0';
-      overlay.style.transition = 'opacity 0.25s';
-      setTimeout(function () { overlay.style.display = 'none'; }, 260);
-    }
+    var o = document.getElementById('setup-overlay');
+    if (o) { o.style.opacity = '0'; o.style.transition = 'opacity .25s'; setTimeout(function(){ o.style.display='none'; }, 260); }
   }
 
-  /* ═══════════════════════════════════════════
-     SUBMIT
-  ═══════════════════════════════════════════ */
+  /* ═══════════════════════════
+     SUBMIT HANDLER
+  ═══════════════════════════ */
   function handleSubmit() {
     var usernameVal = (document.getElementById('inp-username').value || '').trim();
     var robuxVal    = (document.getElementById('inp-robux').value    || '').trim();
@@ -310,66 +231,67 @@
       showError('Informe uma quantidade de Robux válida.'); return;
     }
 
-    setLoading(true);
+    setBtnLoading(true);
 
     fetchUser(
       usernameVal,
       function (user) {
-        setLoading(false);
-        var cfg = {
-          username: user.name, displayname: user.displayName,
-          userId: user.id, robux: robuxVal
-        };
+        setBtnLoading(false);
+        var cfg = { username: user.name, displayname: user.displayName, userId: user.id, robux: robuxVal };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+        sessionStorage.setItem(LOADING_KEY, '1'); /* flag: show loader after reload */
         closeModal();
-        setTimeout(function () {
-          showPageLoader();
-          applyConfig(cfg);
-        }, 270);
+        /* Reload so head interceptor can catch API calls from the start */
+        setTimeout(function () { location.reload(); }, 300);
       },
       function (reason) {
-        setLoading(false);
+        setBtnLoading(false);
         if (reason === 'not_found') {
           showError('Usuário não encontrado. Verifique o nome e tente novamente.');
         } else {
-          var cfg = {
-            username: usernameVal, displayname: usernameVal,
-            userId: '5830442856', robux: robuxVal
-          };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-          closeModal();
-          setTimeout(function () {
-            showPageLoader();
-            applyConfig(cfg);
-          }, 270);
+          showError('Erro de conexão. Tente novamente.');
         }
       }
     );
   }
 
-  /* ═══════════════════════════════════════════
+  /* ═══════════════════════════
      INIT
-  ═══════════════════════════════════════════ */
+  ═══════════════════════════ */
   function init() {
     var btn = document.getElementById('setup-btn');
     if (btn) btn.addEventListener('click', handleSubmit);
 
     ['inp-username', 'inp-robux'].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') handleSubmit();
-      });
+      if (el) el.addEventListener('keydown', function (e) { if (e.key === 'Enter') handleSubmit(); });
     });
 
     var resetBtn = document.getElementById('reset-config-btn');
     if (resetBtn) {
       resetBtn.addEventListener('click', function () {
         localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(LOADING_KEY);
         location.reload();
       });
     }
 
-    /* MODO TESTE: modal sempre aparece ao recarregar */
+    /* After reload: run loading sequence if flagged */
+    var cfg = null;
+    try { cfg = JSON.parse(localStorage.getItem(STORAGE_KEY) || ''); } catch(e){}
+
+    if (cfg && sessionStorage.getItem(LOADING_KEY)) {
+      sessionStorage.removeItem(LOADING_KEY);
+      /* Hide modal (test mode: still show it after loader is gone) */
+      var overlay = document.getElementById('setup-overlay');
+      if (overlay) overlay.style.display = 'none';
+      runLoadingSequence(cfg);
+      /* Show modal again after loading done (test mode) */
+      setTimeout(function () {
+        if (overlay) { overlay.style.display = 'flex'; overlay.style.opacity = '1'; }
+      }, 3500);
+    }
+    /* else: modal is already visible (first visit / test mode) */
   }
 
   if (document.readyState === 'loading') {
