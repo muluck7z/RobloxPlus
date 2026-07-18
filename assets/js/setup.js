@@ -10,11 +10,55 @@
     var username  = cfg.username;
     var dispname  = cfg.displayname || username;
     var userId    = cfg.userId;
-    var robux     = (parseInt(cfg.robux, 10) || 0).toLocaleString('pt-BR');
+    var robuxFmt  = (parseInt(cfg.robux, 10) || 0).toLocaleString('en-US');
     var avatarUrl = 'https://www.roblox.com/headshot-thumbnail/image?userId='
                     + userId + '&width=150&height=150&format=png';
 
-    /* 1 ─ Substitui textos na página */
+    /* 1 ─ Atualiza meta user-data */
+    var meta = document.querySelector('meta[name="user-data"]');
+    if (meta) {
+      meta.setAttribute('data-userid',      userId);
+      meta.setAttribute('data-name',        username);
+      meta.setAttribute('data-displayname', dispname);
+    }
+
+    /* 2 ─ Avatar: seletor exato encontrado no HTML estático */
+    function replaceAvatar() {
+      /* Seletor principal: .avatar-card-image img */
+      document.querySelectorAll('.avatar-card-image img').forEach(function (img) {
+        img.src = avatarUrl;
+        img.alt = username;
+        img.style.borderRadius = '50%';
+        img.style.objectFit   = 'cover';
+        img.removeAttribute('srcset');
+      });
+      /* Fallback: img com alt do usuário antigo */
+      document.querySelectorAll('img[alt="Frost_Lychen"], img[alt="Frost"]').forEach(function (img) {
+        img.src = avatarUrl;
+        img.alt = username;
+        img.style.borderRadius = '50%';
+        img.removeAttribute('srcset');
+      });
+    }
+
+    /* 3 ─ Robux: id="nav-robux-amount" existe no HTML estático com valor "73" */
+    function replaceRobux() {
+      var el = document.getElementById('nav-robux-amount');
+      if (el) el.textContent = robuxFmt;
+
+      /* Atualiza aria-label do botão (ex: "Robux: 73") */
+      var btn = document.querySelector('[aria-label^="Robux:"]');
+      if (btn) btn.setAttribute('aria-label', 'Robux: ' + robuxFmt);
+    }
+
+    /* 4 ─ Links de perfil com userId antigo */
+    function replaceLinks() {
+      document.querySelectorAll('a[href*="5830442856"]').forEach(function (a) {
+        a.href = a.href.replace(/5830442856/g, userId);
+      });
+    }
+
+    /* 5 ─ Textos: Frost_Lychen → username, Frost → dispname */
     function replaceText(root) {
       if (!root) return;
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
@@ -27,113 +71,28 @@
       }
     }
 
-    /* 2 ─ Substitui o avatar cinza no nav */
-    function replaceAvatar() {
-      var nav = document.getElementById('navigation-container')
-             || document.getElementById('header')
-             || document.body;
-
-      /* Qualquer img pequena no nav = avatar */
-      nav.querySelectorAll('img').forEach(function (img) {
-        var src = img.getAttribute('src') || '';
-        var w   = img.naturalWidth || img.offsetWidth || img.width;
-        var h   = img.naturalHeight || img.offsetHeight || img.height;
-
-        var isAvatar =
-          src.indexOf('headshot') !== -1 ||
-          src.indexOf('bust-thumbnail') !== -1 ||
-          src.indexOf('avatar-thumbnail') !== -1 ||
-          src.indexOf('thumbnails.roblox') !== -1 ||
-          src.indexOf('5830442856') !== -1 ||
-          (w > 0 && w < 80) || (h > 0 && h < 80) ||
-          src === '';   /* img vazia = placeholder do avatar */
-
-        if (isAvatar) {
-          img.src = avatarUrl;
-          img.style.borderRadius = '50%';
-          img.style.objectFit   = 'cover';
-          img.removeAttribute('srcset');
-        }
-      });
+    function applyAll() {
+      replaceAvatar();
+      replaceRobux();
+      replaceLinks();
+      replaceText(document.body);
     }
 
-    /* 3 ─ Injeta saldo de Robux ao lado do link "Robux" */
-    function injectRobux() {
-      /* Tenta seletores nativos primeiro */
-      var natives = document.querySelectorAll(
-        '.nav-robux-amount, [data-testid*="robux"], [class*="robuxAmount"], [id*="robux-balance"]'
-      );
-      if (natives.length) { natives.forEach(function(e){ e.textContent = robux; }); }
+    applyAll();
 
-      /* Fallback: badge colado ao link "Robux" do nav */
-      var link = document.querySelector(
-        'a.robux-menu-btn, #navigation-robux-container a, a[href*="upgrades/robux"]'
-      );
-      if (!link) return;
-
-      var existing = document.getElementById('rbx-injected-robux');
-      if (existing) { existing.textContent = robux; return; }
-
-      var badge = document.createElement('span');
-      badge.id = 'rbx-injected-robux';
-      badge.style.cssText =
-        'font-size:12px;font-weight:700;color:#fff;margin-left:5px;' +
-        'background:rgba(0,162,255,.2);border-radius:8px;padding:1px 8px;' +
-        'vertical-align:middle;pointer-events:none;';
-      badge.textContent = robux;
-      link.appendChild(badge);
-    }
-
-    /* ─ Executa tudo imediatamente ─ */
-    replaceText(document.body);
-    replaceAvatar();
-    injectRobux();
-
-    /* ─ Polling por 12 s para conteúdo dinâmico ─ */
+    /* Polling por 10 s (cobre conteúdo renderizado com atraso) */
     var n = 0;
     var poll = setInterval(function () {
-      replaceText(document.body);
-      replaceAvatar();
-      injectRobux();
-      if (++n >= 24) clearInterval(poll);
+      applyAll();
+      if (++n >= 20) clearInterval(poll);
     }, 500);
 
-    /* ─ MutationObserver ─ */
-    var obs = new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        m.addedNodes.forEach(function (node) {
-          if (node.nodeType === 1) { replaceText(node); replaceAvatar(); injectRobux(); }
-          else if (node.nodeType === 3) {
-            var v = node.nodeValue;
-            if (!v) return;
-            var n2 = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, dispname);
-            if (n2 !== v) node.nodeValue = n2;
-          }
-        });
-        /* Intercepta src sendo setado por scripts externos */
-        if (m.type === 'attributes' && m.target.tagName === 'IMG') {
-          var nav = document.getElementById('navigation-container');
-          if (nav && nav.contains(m.target)) {
-            m.target.src = avatarUrl;
-            m.target.style.borderRadius = '50%';
-          }
-        }
-      });
-    });
+    /* MutationObserver: captura nós adicionados dinamicamente */
+    var obs = new MutationObserver(function () { applyAll(); });
     obs.observe(document.body, {
       childList: true, subtree: true,
-      attributes: true, attributeFilter: ['src']
+      attributes: true, attributeFilter: ['src', 'alt']
     });
-
-    /* onerror: se qualquer img no nav falhar, força o avatar */
-    document.addEventListener('error', function (e) {
-      if (e.target.tagName !== 'IMG') return;
-      var nav = document.getElementById('navigation-container');
-      if (nav && nav.contains(e.target)) {
-        e.target.src = avatarUrl;
-        e.target.style.borderRadius = '50%';
-      }
-    }, true);
   }
 
   /* ═══════════════════════════════════
@@ -184,13 +143,11 @@
   }
   function closeModal() {
     var o = document.getElementById('setup-overlay');
-    if (o) { o.style.transition = 'opacity .25s'; o.style.opacity = '0';
-             setTimeout(function(){ o.style.display = 'none'; }, 260); }
-  }
-  function reopenModal() {
-    var o = document.getElementById('setup-overlay');
-    if (o) { o.style.display = 'flex'; o.style.opacity = '0';
-             setTimeout(function(){ o.style.transition='opacity .3s'; o.style.opacity='1'; }, 30); }
+    if (o) {
+      o.style.transition = 'opacity .25s';
+      o.style.opacity = '0';
+      setTimeout(function () { o.style.display = 'none'; }, 260);
+    }
   }
 
   /* ═══════════════════════════════════
@@ -219,8 +176,6 @@
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
         closeModal();
-
-        /* Mostra overlay "Aplicando..." */
         showLoader();
         setTimeout(function () {
           applyConfig(cfg);
@@ -257,8 +212,6 @@
         location.reload();
       });
     }
-
-    /* Modo teste: modal sempre aparece — não carrega config automaticamente */
   }
 
   if (document.readyState === 'loading') {
