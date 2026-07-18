@@ -1,97 +1,4 @@
-<html lang="pt"><script type="text/javascript" async="" src="https://ssl.google-analytics.com/ga.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/content/location/location.js" id="eppiocemhmnlbhjplcgkofciiegomcon"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><!--<![endif]--><head data-machine-id="1f492846-69a6-3781-2493-c4b48f4f6029">
-<script>
-/* ── RBX Interceptor: runs before Navigation.js / Economy API calls ── */
-(function(){
-  var cfg;
-  try { cfg = JSON.parse(localStorage.getItem('rbx_page_config')||'null'); } catch(e){}
-  if (!cfg) return;
-
-  var userId   = cfg.userId || '5830442856';
-  var robux    = parseInt(cfg.robux, 10) || 0;
-  var username = cfg.username || 'User';
-  var dispname = cfg.displayname || username;
-  var avatarUrl = 'https://www.roblox.com/headshot-thumbnail/image?userId='+userId+'&width=150&height=150&format=png';
-
-  /* 1. Intercept fetch — economy (robux balance) + thumbnails (avatar) */
-  var _fetch = window.fetch;
-  window.fetch = function(resource, init) {
-    var url = typeof resource === 'string' ? resource : ((resource && resource.url) || '');
-    /* Economy API → robux balance */
-    if (/economy\.roblox\.com.*\/currency/.test(url) || /economy\.roblox\.com.*robux/.test(url)) {
-      return Promise.resolve(new Response(JSON.stringify({robux: robux, agRobux: 0}),
-        {status:200, headers:{'Content-Type':'application/json'}}));
-    }
-    /* Thumbnail API → avatar headshot */
-    if (/thumbnails\.roblox\.com.*avatar/.test(url) || /thumbnails\.roblox\.com.*headshot/.test(url)) {
-      var ids = url.match(/userIds=(\d+)/);
-      var tid = ids ? parseInt(ids[1]) : parseInt(userId);
-      return Promise.resolve(new Response(JSON.stringify({
-        data:[{targetId:tid, state:'Completed', imageUrl:avatarUrl}]
-      }), {status:200, headers:{'Content-Type':'application/json'}}));
-    }
-    /* Users/presence API → inject correct user */
-    if (/users\.roblox\.com.*\/v1\/users\/\d+$/.test(url)) {
-      return Promise.resolve(new Response(JSON.stringify({
-        id:parseInt(userId), name:username, displayName:dispname
-      }), {status:200, headers:{'Content-Type':'application/json'}}));
-    }
-    return _fetch ? _fetch.apply(this, arguments) : Promise.reject(new Error('no fetch'));
-  };
-
-  /* 2. Intercept XMLHttpRequest */
-  var _open = XMLHttpRequest.prototype.open;
-  var _send = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function(m, url) {
-    this.__url = url || '';
-    return _open.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function(body) {
-    var url = this.__url || '';
-    var self = this;
-    function mockResponse(json) {
-      Object.defineProperty(self,'readyState',{get:function(){return 4;},configurable:true});
-      Object.defineProperty(self,'status',{get:function(){return 200;},configurable:true});
-      Object.defineProperty(self,'responseText',{get:function(){return JSON.stringify(json);},configurable:true});
-      Object.defineProperty(self,'response',{get:function(){return JSON.stringify(json);},configurable:true});
-      setTimeout(function(){
-        if(self.onreadystatechange) self.onreadystatechange();
-        if(self.onload) self.onload();
-      },0);
-    }
-    if (/economy\.roblox\.com.*\/currency/.test(url) || /economy\.roblox\.com.*robux/.test(url)) {
-      return mockResponse({robux:robux, agRobux:0});
-    }
-    if (/thumbnails\.roblox\.com.*avatar/.test(url)) {
-      return mockResponse({data:[{targetId:parseInt(userId), state:'Completed', imageUrl:avatarUrl}]});
-    }
-    return _send.apply(this, arguments);
-  };
-
-  /* 3. Intercept img.src setter — catch avatar img being set by Navigation.js */
-  var _desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-  if (_desc && _desc.set) {
-    Object.defineProperty(HTMLImageElement.prototype, 'src', {
-      configurable: true,
-      get: _desc.get,
-      set: function(val) {
-        if (val && (
-          val.indexOf('5830442856') !== -1 ||
-          val.indexOf('headshot-thumbnail') !== -1 ||
-          val.indexOf('bust-thumbnail') !== -1 ||
-          /thumbnails\.roblox\.com.*avatar/.test(val)
-        )) {
-          _desc.set.call(this, avatarUrl);
-        } else {
-          _desc.set.call(this, val);
-        }
-      }
-    });
-  }
-
-  /* 4. Store config globally so setup.js can access it */
-  window.__rbxConfig = cfg;
-})();
-</script><style>@charset "UTF-8";[ng\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style><style type="text/css">@charset "UTF-8";[ng\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style>
+<html lang="pt"><script type="text/javascript" async="" src="https://ssl.google-analytics.com/ga.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/content/location/location.js" id="eppiocemhmnlbhjplcgkofciiegomcon"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><!--<![endif]--><head data-machine-id="1f492846-69a6-3781-2493-c4b48f4f6029"><style>@charset "UTF-8";[ng\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style><style type="text/css">@charset "UTF-8";[ng\:cloak],[ng-cloak],[data-ng-cloak],[x-ng-cloak],.ng-cloak,.x-ng-cloak,.ng-hide:not(.ng-hide-animate){display:none !important;}ng\:form{display:block;}.ng-animate-shim{visibility:hidden;}.ng-anchor{position:absolute;}</style>
     <!-- MachineID: 1f492846-69a6-3781-2493-c4b48f4f6029 -->
     <title>Comprar Robux</title>
 
@@ -814,25 +721,7 @@
 <div id="page-loading-overlay">
   <img class="plo-logo" src="https://images.rbxcdn.com/fc3f3e3158fc20ebb5ccc972064ebfe6.png" alt="Roblox">
   <div class="plo-spinner"></div>
-  <div class="plo-steps">
-    <div class="plo-step" id="step-0">
-      <div class="plo-step-icon"></div>
-      <span>Substituindo nome e textos</span>
-    </div>
-    <div class="plo-step" id="step-1">
-      <div class="plo-step-icon"></div>
-      <span>Carregando foto do perfil</span>
-    </div>
-    <div class="plo-step" id="step-2">
-      <div class="plo-step-icon"></div>
-      <span>Inserindo saldo de Robux</span>
-    </div>
-    <div class="plo-step" id="step-3">
-      <div class="plo-step-icon"></div>
-      <span>Finalizando página</span>
-    </div>
-  </div>
-  <div class="plo-text">Aguarde um momento...</div>
+  <div class="plo-text">Aplicando configurações...</div>
 </div>
 <!-- ===== FIM TELA DE CARREGAMENTO ===== -->
 
