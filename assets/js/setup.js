@@ -224,11 +224,7 @@
         showLoader();
         setTimeout(function () {
           applyConfig(cfg);
-          /* Esconde após 2.5 s e reabre modal (modo teste) */
-          setTimeout(function () {
-            hideLoader();
-            setTimeout(reopenModal, 700);
-          }, 2500);
+          setTimeout(hideLoader, 2000);
         }, 300);
       },
       function (reason) {
