@@ -1,3 +1,6 @@
+/* ═══════════════════════════════════════
+   MODAL DE CONFIGURAÇÃO
+═══════════════════════════════════════ */
 #setup-overlay {
   position: fixed;
   inset: 0;
@@ -135,8 +138,104 @@
   vertical-align: middle;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+/* ═══════════════════════════════════════
+   TELA DE CARREGAMENTO (pós-confirmação)
+═══════════════════════════════════════ */
+#page-loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: #1a1c21;
+  z-index: 99998;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  transition: opacity 0.5s ease;
+}
+
+#page-loading-overlay.active {
+  display: flex;
+}
+
+#page-loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.plo-logo {
+  width: 140px;
+  opacity: 0.95;
+}
+
+.plo-spinner {
+  width: 52px;
+  height: 52px;
+  border: 4px solid rgba(0, 162, 255, 0.2);
+  border-top-color: #00a2ff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+.plo-text {
+  color: #9a9ab0;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.plo-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.plo-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #555570;
+  font-size: 13px;
+  font-family: Arial, sans-serif;
+  transition: color 0.3s;
+}
+
+.plo-step.done {
+  color: #44dd88;
+}
+
+.plo-step.active {
+  color: #fff;
+}
+
+.plo-step-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #555570;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  transition: all 0.3s;
+}
+
+.plo-step.done .plo-step-icon {
+  background: #44dd88;
+  border-color: #44dd88;
+  color: #000;
+}
+
+.plo-step.done .plo-step-icon::after {
+  content: '✓';
+}
+
+.plo-step.active .plo-step-icon {
+  border-color: #00a2ff;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
 }
 
 #reset-config-btn {
@@ -158,4 +257,8 @@
   color: #aaa;
   border-color: #555;
   background: rgba(0, 0, 0, 0.8);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
