@@ -308,16 +308,14 @@
       });
     }
 
-    /* Verifica config salva */
-    var stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        closeModal();
-        applyConfig(JSON.parse(stored));
-      } catch (e) {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
+    /* MODO TESTE: modal sempre aparece ao recarregar a página */
+    /* Para ativar salvamento automático, comente as linhas abaixo e
+       descomente o bloco "Verifica config salva" */
+    // var stored = localStorage.getItem(STORAGE_KEY);
+    // if (stored) {
+    //   try { closeModal(); applyConfig(JSON.parse(stored)); }
+    //   catch (e) { localStorage.removeItem(STORAGE_KEY); }
+    // }
   }
 
   if (document.readyState === 'loading') {
