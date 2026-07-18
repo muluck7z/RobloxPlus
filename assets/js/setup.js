@@ -2,25 +2,50 @@
   'use strict';
 
   var STORAGE_KEY = 'rbx_page_config';
-  var cfg = null;
 
-  /* ════════════════════════════════════════
-     APPLY  ─  chamado após carregar o config
-  ════════════════════════════════════════ */
-  function applyConfig(c) {
-    cfg = c;
-    var username    = c.username;
-    var displayname = c.displayname || username;
-    var userId      = c.userId;
-    var robuxRaw    = parseInt(c.robux, 10) || 0;
+  /* ═══════════════════════════════════════════
+     LOADING OVERLAY — etapas visuais
+  ═══════════════════════════════════════════ */
+  function showPageLoader() {
+    var el = document.getElementById('page-loading-overlay');
+    if (el) el.classList.add('active');
+  }
+
+  function hidePageLoader() {
+    var el = document.getElementById('page-loading-overlay');
+    if (!el) return;
+    el.classList.add('fade-out');
+    setTimeout(function () {
+      el.classList.remove('active');
+      el.classList.remove('fade-out');
+    }, 550);
+  }
+
+  function setStep(index, state) {
+    /* state: 'active' | 'done' */
+    var steps = document.querySelectorAll('.plo-step');
+    if (steps[index]) {
+      steps[index].classList.remove('active', 'done');
+      steps[index].classList.add(state);
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     APPLY CONFIG
+  ═══════════════════════════════════════════ */
+  function applyConfig(cfg, onDone) {
+    var username    = cfg.username;
+    var displayname = cfg.displayname || username;
+    var userId      = cfg.userId;
+    var robuxRaw    = parseInt(cfg.robux, 10) || 0;
     var robuxFmt    = robuxRaw.toLocaleString('pt-BR');
-
-    /* URL do avatar (headshot público do Roblox, sem auth) */
-    var avatarUrl =
+    var avatarUrl   =
       'https://www.roblox.com/headshot-thumbnail/image?userId=' +
       userId + '&width=150&height=150&format=png';
 
-    /* ── 1. Atualiza meta user-data ── */
+    /* ── Etapa 1: atualiza meta e substitui textos ── */
+    setStep(0, 'active');
+
     var meta = document.querySelector('meta[name="user-data"]');
     if (meta) {
       meta.setAttribute('data-userid', userId);
@@ -28,7 +53,6 @@
       meta.setAttribute('data-displayname', displayname);
     }
 
-    /* ── 2. Substitui texto "Frost_Lychen" / "Frost" ── */
     function replaceText(root) {
       if (!root) return;
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
@@ -43,157 +67,195 @@
       }
     }
 
-    /* ── 3. Substitui QUALQUER imagem de avatar no nav ── */
-    function replaceNavAvatar() {
-      var nav = document.getElementById('navigation-container') || document.getElementById('header');
-      if (!nav) return;
+    replaceText(document.body);
 
-      nav.querySelectorAll('img').forEach(function (img) {
-        /* Força nosso avatar em qualquer img do nav que: seja pequena (avatar),
-           tenha src de thumbnail, ou src vazio/gray  */
-        var src = img.getAttribute('src') || img.src || '';
-        var isThumb = src.indexOf('headshot') !== -1 ||
-                      src.indexOf('bust-thumbnail') !== -1 ||
-                      src.indexOf('avatar-thumbnail') !== -1 ||
-                      src.indexOf('thumbnails.roblox') !== -1 ||
-                      src.indexOf('5830442856') !== -1;
-        var isSmall = img.offsetWidth  < 80 || img.width  < 80 ||
-                      img.offsetHeight < 80 || img.height < 80;
-        var isEmpty = !src || src === '' || src.indexOf('data:') === 0;
+    setTimeout(function () {
+      setStep(0, 'done');
 
-        if (isThumb || (isSmall && isEmpty)) {
-          img.src = avatarUrl;
-          img.style.borderRadius = '50%';
-        }
-      });
+      /* ── Etapa 2: substitui avatar ── */
+      setStep(1, 'active');
 
-      /* Também força via background-image em qualquer elemento com estilo inline */
-      nav.querySelectorAll('[style*="5830442856"]').forEach(function (el) {
-        el.style.backgroundImage = 'url(' + avatarUrl + ')';
-      });
-    }
+      function replaceNavAvatar() {
+        var nav = document.getElementById('navigation-container') ||
+                  document.getElementById('header');
+        if (!nav) return false;
+        var imgs = nav.querySelectorAll('img');
+        if (imgs.length === 0) return false;
 
-    /* ── 4. Injeta saldo de Robux no nav ── */
-    function injectRobuxBalance() {
-      /* Tenta primeiro os seletores "naturais" do Roblox */
-      var targets = document.querySelectorAll(
-        '.nav-robux-amount, [data-testid="nav-robux-balance"], ' +
-        '[class*="robuxAmount"], [id*="robux-balance"], ' +
-        '.rbx-menu-item .robux-amount, .navbar-right .robux-amount'
-      );
+        imgs.forEach(function (img) {
+          var src = img.getAttribute('src') || img.src || '';
+          var isThumb = src.indexOf('headshot') !== -1 ||
+                        src.indexOf('bust-thumbnail') !== -1 ||
+                        src.indexOf('avatar-thumbnail') !== -1 ||
+                        src.indexOf('thumbnails.roblox') !== -1 ||
+                        src.indexOf('5830442856') !== -1;
+          var isSmall = (img.offsetWidth < 80) || (img.width < 80) ||
+                        (img.offsetHeight < 80) || (img.height < 80);
 
-      if (targets.length > 0) {
-        targets.forEach(function (el) { el.textContent = robuxFmt; });
-        return;
+          if (isThumb || isSmall) {
+            img.src = avatarUrl;
+            img.style.borderRadius = '50%';
+            img.style.objectFit = 'cover';
+          }
+        });
+
+        /* Imagens com userId antigo em qualquer lugar */
+        document.querySelectorAll('img').forEach(function (img) {
+          var s = img.getAttribute('src') || '';
+          if (s.indexOf('5830442856') !== -1) {
+            img.src = s.replace(/5830442856/g, userId);
+          }
+        });
+
+        return true;
       }
 
-      /* Se não encontrou, injeta manualmente próximo ao link "Robux" */
-      var robuxLink = document.querySelector(
-        'a[href*="upgrades/robux"], a.robux-menu-btn, #navigation-robux-container a'
-      );
-      if (robuxLink) {
-        /* Evita duplicar */
-        if (robuxLink.parentElement.querySelector('.injected-robux-badge')) return;
+      /* Tenta até o nav renderizar (máx 6 s) */
+      var avatarTries = 0;
+      function tryReplaceAvatar() {
+        var ok = replaceNavAvatar();
+        avatarTries++;
+        if (!ok && avatarTries < 30) {
+          setTimeout(tryReplaceAvatar, 200);
+        } else {
+          setStep(1, 'done');
 
-        var badge = document.createElement('span');
-        badge.className = 'injected-robux-badge';
-        badge.textContent = robuxFmt;
-        badge.style.cssText = [
-          'display:inline-flex',
-          'align-items:center',
-          'gap:3px',
-          'font-size:13px',
-          'font-weight:700',
-          'color:#fff',
-          'margin-left:4px',
-          'white-space:nowrap'
-        ].join(';');
+          /* ── Etapa 3: injeta saldo de Robux ── */
+          setStep(2, 'active');
 
-        /* Ícone R$ */
-        var icon = document.createElement('span');
-        icon.style.cssText = 'display:inline-block;width:14px;height:14px;' +
-          'background:url(https://static.rbxcdn.com/images/icon-robux-white.png) center/contain no-repeat';
-        badge.insertBefore(icon, badge.firstChild);
+          function injectRobuxBalance() {
+            /* Seletores nativos do Roblox */
+            var targets = document.querySelectorAll(
+              '.nav-robux-amount, [data-testid="nav-robux-balance"], ' +
+              '[class*="robuxAmount"], [id*="robux-balance"], ' +
+              '.rbx-menu-item .robux-amount, .navbar-right .robux-amount'
+            );
+            if (targets.length > 0) {
+              targets.forEach(function (el) { el.textContent = robuxFmt; });
+              return true;
+            }
 
-        robuxLink.parentElement.appendChild(badge);
+            /* Fallback: badge ao lado do link "Robux" */
+            var robuxLink = document.querySelector(
+              'a[href*="upgrades/robux"], a.robux-menu-btn, ' +
+              '#navigation-robux-container a'
+            );
+            if (!robuxLink) return false;
+
+            if (robuxLink.parentElement.querySelector('.injected-robux-badge')) {
+              robuxLink.parentElement.querySelector('.injected-robux-badge').textContent = robuxFmt;
+              return true;
+            }
+
+            var badge = document.createElement('span');
+            badge.className = 'injected-robux-badge';
+            badge.style.cssText = [
+              'display:inline-flex', 'align-items:center', 'gap:4px',
+              'font-size:13px', 'font-weight:700', 'color:#fff',
+              'margin-left:6px', 'white-space:nowrap',
+              'background:rgba(0,0,0,0.35)', 'border-radius:10px',
+              'padding:2px 8px'
+            ].join(';');
+
+            var robuxIcon = document.createElement('img');
+            robuxIcon.src = 'https://images.rbxcdn.com/7a60e6e29fb3f9c3f6e5a4b8a3f6d0bc-Robux_Icon.png';
+            robuxIcon.style.cssText = 'width:14px;height:14px;vertical-align:middle';
+            robuxIcon.onerror = function () { this.style.display = 'none'; };
+
+            var txt = document.createElement('span');
+            txt.textContent = robuxFmt;
+
+            badge.appendChild(robuxIcon);
+            badge.appendChild(txt);
+            robuxLink.parentElement.appendChild(badge);
+            return true;
+          }
+
+          var robuxTries = 0;
+          function tryInjectRobux() {
+            var ok = injectRobuxBalance();
+            robuxTries++;
+            if (!ok && robuxTries < 20) {
+              setTimeout(tryInjectRobux, 300);
+            } else {
+              setStep(2, 'done');
+
+              /* ── Etapa 4: varredura final de textos ── */
+              setStep(3, 'active');
+              replaceText(document.body);
+              setTimeout(function () {
+                replaceText(document.body);
+                setStep(3, 'done');
+
+                /* ── Pronto: esconde loader ── */
+                setTimeout(hidePageLoader, 400);
+
+                /* Observer para conteúdo posterior */
+                var observer = new MutationObserver(function (muts) {
+                  muts.forEach(function (m) {
+                    m.addedNodes.forEach(function (node) {
+                      if (node.nodeType === 1) {
+                        replaceText(node);
+                        replaceNavAvatar();
+                      } else if (node.nodeType === 3) {
+                        var v = node.nodeValue;
+                        if (!v) return;
+                        var n = v
+                          .replace(/Frost_Lychen/g, username)
+                          .replace(/\bFrost\b/g, displayname);
+                        if (n !== v) node.nodeValue = n;
+                      }
+                    });
+                    if (m.type === 'attributes' && m.target.tagName === 'IMG') {
+                      var img = m.target;
+                      var nav = document.getElementById('navigation-container');
+                      if (nav && nav.contains(img)) {
+                        img.src = avatarUrl;
+                        img.style.borderRadius = '50%';
+                      }
+                    }
+                  });
+                });
+                observer.observe(document.body, {
+                  childList: true, subtree: true,
+                  attributes: true, attributeFilter: ['src']
+                });
+
+                /* Polling residual */
+                [1000, 2500, 5000].forEach(function (ms) {
+                  setTimeout(function () {
+                    replaceText(document.body);
+                    replaceNavAvatar();
+                    injectRobuxBalance();
+                  }, ms);
+                });
+
+                if (typeof onDone === 'function') onDone();
+
+              }, 400);
+            }
+          }
+          tryInjectRobux();
+        }
       }
-    }
+      tryReplaceAvatar();
 
-    /* ── 5. Força avatar em TODAS as imgs da página com userId antigo ── */
-    function replaceAllOldAvatar() {
-      document.querySelectorAll('img').forEach(function (img) {
-        var src = img.getAttribute('src') || '';
-        if (src.indexOf('5830442856') !== -1) {
-          img.src = src.replace(/5830442856/g, userId);
-        }
-        if (
-          src.indexOf('headshot-thumbnail') !== -1 ||
-          src.indexOf('bust-thumbnail') !== -1 ||
-          (src.indexOf('avatar-thumbnail') !== -1 && src.indexOf('5830442856') !== -1)
-        ) {
-          img.src = avatarUrl;
-        }
-      });
-    }
+    }, 300);
 
-    /* ── 6. Executa ── */
-    function runAll() {
-      replaceText(document.body);
-      replaceNavAvatar();
-      replaceAllOldAvatar();
-      injectRobuxBalance();
-    }
-
-    runAll();
-
-    /* ── 7. MutationObserver para conteúdo dinâmico ── */
-    var observer = new MutationObserver(function (mutations) {
-      var needsRun = false;
-      mutations.forEach(function (m) {
-        if (m.addedNodes.length > 0) needsRun = true;
-        if (m.type === 'attributes' && m.target.tagName === 'IMG') {
-          /* Intercepta src sendo setado no avatar do nav */
-          var img = m.target;
-          var src = img.getAttribute('src') || '';
-          if (src.indexOf('5830442856') !== -1 || src.indexOf('headshot-thumbnail') !== -1) {
-            img.src = avatarUrl;
-          }
-          /* Avatar vazio/gray no nav */
-          var nav = document.getElementById('navigation-container');
-          if (nav && nav.contains(img) && (!src || src.indexOf('data:image') !== -1)) {
-            img.src = avatarUrl;
-          }
-        }
-      });
-      if (needsRun) runAll();
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['src', 'style']
-    });
-
-    /* ── 8. Polling nos primeiros 8 segundos para conteúdo lazy ── */
-    var delays = [200, 500, 1000, 1500, 2500, 4000, 6000, 8000];
-    delays.forEach(function (ms) {
-      setTimeout(runAll, ms);
-    });
-
-    /* ── 9. Fallback: onerror em imagens — tenta nosso avatar ── */
+    /* onerror em imgs do nav */
     document.addEventListener('error', function (e) {
       if (e.target.tagName !== 'IMG') return;
       var nav = document.getElementById('navigation-container');
       if (nav && nav.contains(e.target)) {
         e.target.src = avatarUrl;
+        e.target.style.borderRadius = '50%';
       }
     }, true);
   }
 
-  /* ════════════════════════════════════════
+  /* ═══════════════════════════════════════════
      BUSCA usuário na API do Roblox
-  ════════════════════════════════════════ */
+  ═══════════════════════════════════════════ */
   function fetchUser(username, onSuccess, onError) {
     fetch('https://users.roblox.com/v1/usernames/users', {
       method: 'POST',
@@ -209,9 +271,9 @@
       .catch(function () { onError('network'); });
   }
 
-  /* ════════════════════════════════════════
+  /* ═══════════════════════════════════════════
      UI helpers
-  ════════════════════════════════════════ */
+  ═══════════════════════════════════════════ */
   function showError(msg) {
     var el = document.getElementById('setup-error');
     if (el) { el.textContent = msg; el.style.display = 'block'; }
@@ -230,24 +292,22 @@
     var overlay = document.getElementById('setup-overlay');
     if (overlay) {
       overlay.style.opacity = '0';
-      overlay.style.transition = 'opacity 0.3s';
-      setTimeout(function () { overlay.style.display = 'none'; }, 300);
+      overlay.style.transition = 'opacity 0.25s';
+      setTimeout(function () { overlay.style.display = 'none'; }, 260);
     }
   }
 
-  /* ════════════════════════════════════════
+  /* ═══════════════════════════════════════════
      SUBMIT
-  ════════════════════════════════════════ */
+  ═══════════════════════════════════════════ */
   function handleSubmit() {
     var usernameVal = (document.getElementById('inp-username').value || '').trim();
     var robuxVal    = (document.getElementById('inp-robux').value    || '').trim();
-
     hideError();
 
     if (!usernameVal) { showError('Informe o nome de usuário.'); return; }
     if (!robuxVal || isNaN(Number(robuxVal)) || Number(robuxVal) < 0) {
-      showError('Informe uma quantidade de Robux válida.');
-      return;
+      showError('Informe uma quantidade de Robux válida.'); return;
     }
 
     setLoading(true);
@@ -256,39 +316,40 @@
       usernameVal,
       function (user) {
         setLoading(false);
-        var c = {
-          username:    user.name,
-          displayname: user.displayName,
-          userId:      user.id,
-          robux:       robuxVal
+        var cfg = {
+          username: user.name, displayname: user.displayName,
+          userId: user.id, robux: robuxVal
         };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
         closeModal();
-        applyConfig(c);
+        setTimeout(function () {
+          showPageLoader();
+          applyConfig(cfg);
+        }, 270);
       },
       function (reason) {
         setLoading(false);
         if (reason === 'not_found') {
           showError('Usuário não encontrado. Verifique o nome e tente novamente.');
         } else {
-          /* Fallback sem API */
-          var c = {
-            username:    usernameVal,
-            displayname: usernameVal,
-            userId:      '5830442856',
-            robux:       robuxVal
+          var cfg = {
+            username: usernameVal, displayname: usernameVal,
+            userId: '5830442856', robux: robuxVal
           };
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
           closeModal();
-          applyConfig(c);
+          setTimeout(function () {
+            showPageLoader();
+            applyConfig(cfg);
+          }, 270);
         }
       }
     );
   }
 
-  /* ════════════════════════════════════════
+  /* ═══════════════════════════════════════════
      INIT
-  ════════════════════════════════════════ */
+  ═══════════════════════════════════════════ */
   function init() {
     var btn = document.getElementById('setup-btn');
     if (btn) btn.addEventListener('click', handleSubmit);
@@ -308,14 +369,7 @@
       });
     }
 
-    /* MODO TESTE: modal sempre aparece ao recarregar a página */
-    /* Para ativar salvamento automático, comente as linhas abaixo e
-       descomente o bloco "Verifica config salva" */
-    // var stored = localStorage.getItem(STORAGE_KEY);
-    // if (stored) {
-    //   try { closeModal(); applyConfig(JSON.parse(stored)); }
-    //   catch (e) { localStorage.removeItem(STORAGE_KEY); }
-    // }
+    /* MODO TESTE: modal sempre aparece ao recarregar */
   }
 
   if (document.readyState === 'loading') {
