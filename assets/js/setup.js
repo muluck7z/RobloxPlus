@@ -1,144 +1,116 @@
 (function () {
   'use strict';
 
-  var STORAGE_KEY  = 'rbx_page_config';
-  var LOADING_KEY  = 'rbx_loading_after_reload';
+  var STORAGE_KEY = 'rbx_page_config';
 
-  /* ═══════════════════════════
-     LOADING OVERLAY HELPERS
-  ═══════════════════════════ */
-  function showLoader() {
-    var el = document.getElementById('page-loading-overlay');
-    if (el) el.classList.add('active');
-  }
-  function hideLoader() {
-    var el = document.getElementById('page-loading-overlay');
-    if (!el) return;
-    el.classList.add('fade-out');
-    setTimeout(function () { el.classList.remove('active', 'fade-out'); }, 600);
-  }
-  function setStep(i, state) {
-    var steps = document.querySelectorAll('.plo-step');
-    if (steps[i]) {
-      steps[i].classList.remove('active', 'done');
-      steps[i].classList.add(state);
-    }
-  }
+  /* ═══════════════════════════════════
+     APLICAR config na página
+  ═══════════════════════════════════ */
+  function applyConfig(cfg) {
+    var username  = cfg.username;
+    var dispname  = cfg.displayname || username;
+    var userId    = cfg.userId;
+    var robux     = (parseInt(cfg.robux, 10) || 0).toLocaleString('pt-BR');
+    var avatarUrl = 'https://www.roblox.com/headshot-thumbnail/image?userId='
+                    + userId + '&width=150&height=150&format=png';
 
-  /* ═══════════════════════════
-     APPLY TEXT REPLACEMENTS
-     (avatar/robux handled by
-      head interceptor)
-  ═══════════════════════════ */
-  function applyTextAndAvatar(cfg) {
-    var username    = cfg.username;
-    var displayname = cfg.displayname || username;
-    var userId      = cfg.userId;
-    var robuxFmt    = (parseInt(cfg.robux, 10) || 0).toLocaleString('pt-BR');
-    var avatarUrl   =
-      'https://www.roblox.com/headshot-thumbnail/image?userId=' +
-      userId + '&width=150&height=150&format=png';
-
-    /* Update meta */
-    var meta = document.querySelector('meta[name="user-data"]');
-    if (meta) {
-      meta.setAttribute('data-userid', userId);
-      meta.setAttribute('data-name', username);
-      meta.setAttribute('data-displayname', displayname);
-    }
-
-    /* Replace text nodes */
+    /* 1 ─ Substitui textos na página */
     function replaceText(root) {
       if (!root) return;
       var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
       var node;
       while ((node = walker.nextNode())) {
         var v = node.nodeValue;
-        if (!v || v.trim() === '') continue;
-        var n = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, displayname);
+        if (!v || !v.trim()) continue;
+        var n = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, dispname);
         if (n !== v) node.nodeValue = n;
       }
     }
 
-    /* Force avatar in nav */
-    function forceNavAvatar() {
-      var nav = document.getElementById('navigation-container') || document.getElementById('header');
-      if (!nav) return;
-      nav.querySelectorAll('img').forEach(function (img) {
-        var s = img.getAttribute('src') || '';
-        if (
-          s.indexOf('headshot') !== -1 || s.indexOf('bust-thumbnail') !== -1 ||
-          s.indexOf('avatar-thumbnail') !== -1 || s.indexOf('thumbnails.roblox') !== -1 ||
-          s.indexOf('5830442856') !== -1
-        ) {
-          img.src = avatarUrl;
-          img.style.borderRadius = '50%';
-          img.style.objectFit = 'cover';
-        }
-      });
+    /* 2 ─ Substitui o avatar cinza no nav */
+    function replaceAvatar() {
+      var nav = document.getElementById('navigation-container')
+             || document.getElementById('header')
+             || document.body;
 
-      /* Also catch any small images (avatar icon is usually < 60px) */
+      /* Qualquer img pequena no nav = avatar */
       nav.querySelectorAll('img').forEach(function (img) {
-        var w = img.offsetWidth || img.width;
-        var h = img.offsetHeight || img.height;
-        if ((w > 0 && w < 80) || (h > 0 && h < 80)) {
+        var src = img.getAttribute('src') || '';
+        var w   = img.naturalWidth || img.offsetWidth || img.width;
+        var h   = img.naturalHeight || img.offsetHeight || img.height;
+
+        var isAvatar =
+          src.indexOf('headshot') !== -1 ||
+          src.indexOf('bust-thumbnail') !== -1 ||
+          src.indexOf('avatar-thumbnail') !== -1 ||
+          src.indexOf('thumbnails.roblox') !== -1 ||
+          src.indexOf('5830442856') !== -1 ||
+          (w > 0 && w < 80) || (h > 0 && h < 80) ||
+          src === '';   /* img vazia = placeholder do avatar */
+
+        if (isAvatar) {
           img.src = avatarUrl;
           img.style.borderRadius = '50%';
-          img.style.objectFit = 'cover';
+          img.style.objectFit   = 'cover';
+          img.removeAttribute('srcset');
         }
       });
     }
 
-    /* Inject Robux badge near "Robux" nav link */
-    function injectRobuxBadge() {
-      /* Try native elements first */
+    /* 3 ─ Injeta saldo de Robux ao lado do link "Robux" */
+    function injectRobux() {
+      /* Tenta seletores nativos primeiro */
       var natives = document.querySelectorAll(
-        '.nav-robux-amount, [data-testid="nav-robux-balance"], [class*="robuxAmount"], [id*="robux-balance"]'
+        '.nav-robux-amount, [data-testid*="robux"], [class*="robuxAmount"], [id*="robux-balance"]'
       );
-      if (natives.length > 0) { natives.forEach(function(e){ e.textContent = robuxFmt; }); return; }
+      if (natives.length) { natives.forEach(function(e){ e.textContent = robux; }); }
 
-      /* Fallback: inject next to the Robux nav link */
-      var link = document.querySelector('a.robux-menu-btn, #navigation-robux-container a[href*="robux"]');
+      /* Fallback: badge colado ao link "Robux" do nav */
+      var link = document.querySelector(
+        'a.robux-menu-btn, #navigation-robux-container a, a[href*="upgrades/robux"]'
+      );
       if (!link) return;
-      if (link.querySelector('.rbx-injected-balance')) {
-        link.querySelector('.rbx-injected-balance').textContent = robuxFmt;
-        return;
-      }
+
+      var existing = document.getElementById('rbx-injected-robux');
+      if (existing) { existing.textContent = robux; return; }
+
       var badge = document.createElement('span');
-      badge.className = 'rbx-injected-balance';
+      badge.id = 'rbx-injected-robux';
       badge.style.cssText =
-        'margin-left:5px;font-size:12px;font-weight:700;color:#fff;' +
-        'background:rgba(0,162,255,.18);border-radius:8px;padding:1px 7px;';
-      badge.textContent = robuxFmt;
+        'font-size:12px;font-weight:700;color:#fff;margin-left:5px;' +
+        'background:rgba(0,162,255,.2);border-radius:8px;padding:1px 8px;' +
+        'vertical-align:middle;pointer-events:none;';
+      badge.textContent = robux;
       link.appendChild(badge);
     }
 
-    /* ─ Run immediately ─ */
+    /* ─ Executa tudo imediatamente ─ */
     replaceText(document.body);
-    forceNavAvatar();
-    injectRobuxBadge();
+    replaceAvatar();
+    injectRobux();
 
-    /* ─ Poll for lazy-rendered content ─ */
-    var tries = 0;
+    /* ─ Polling por 12 s para conteúdo dinâmico ─ */
+    var n = 0;
     var poll = setInterval(function () {
       replaceText(document.body);
-      forceNavAvatar();
-      injectRobuxBadge();
-      if (++tries >= 20) clearInterval(poll); /* stop after 10 s */
+      replaceAvatar();
+      injectRobux();
+      if (++n >= 24) clearInterval(poll);
     }, 500);
 
     /* ─ MutationObserver ─ */
     var obs = new MutationObserver(function (muts) {
       muts.forEach(function (m) {
         m.addedNodes.forEach(function (node) {
-          if (node.nodeType === 1) { replaceText(node); forceNavAvatar(); injectRobuxBadge(); }
+          if (node.nodeType === 1) { replaceText(node); replaceAvatar(); injectRobux(); }
           else if (node.nodeType === 3) {
             var v = node.nodeValue;
             if (!v) return;
-            var n = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, displayname);
-            if (n !== v) node.nodeValue = n;
+            var n2 = v.replace(/Frost_Lychen/g, username).replace(/\bFrost\b/g, dispname);
+            if (n2 !== v) node.nodeValue = n2;
           }
         });
+        /* Intercepta src sendo setado por scripts externos */
         if (m.type === 'attributes' && m.target.tagName === 'IMG') {
           var nav = document.getElementById('navigation-container');
           if (nav && nav.contains(m.target)) {
@@ -148,9 +120,12 @@
         }
       });
     });
-    obs.observe(document.body, { childList:true, subtree:true, attributes:true, attributeFilter:['src'] });
+    obs.observe(document.body, {
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: ['src']
+    });
 
-    /* onerror on nav imgs → force our avatar */
+    /* onerror: se qualquer img no nav falhar, força o avatar */
     document.addEventListener('error', function (e) {
       if (e.target.tagName !== 'IMG') return;
       var nav = document.getElementById('navigation-container');
@@ -161,44 +136,38 @@
     }, true);
   }
 
-  /* ═══════════════════════════
-     LOADING STEPS SEQUENCE
-  ═══════════════════════════ */
-  function runLoadingSequence(cfg) {
-    showLoader();
-    var steps = [0, 1, 2, 3];
-    var timings = [0, 600, 1200, 2000];
-
-    steps.forEach(function (i) {
-      setTimeout(function () { setStep(i, 'active'); }, timings[i]);
-      setTimeout(function () { setStep(i, 'done'); }, timings[i] + 500);
-    });
-
-    /* Apply replacements in background while loading shows */
-    setTimeout(function () { applyTextAndAvatar(cfg); }, 200);
-
-    /* Hide loader after all steps */
-    setTimeout(function () { hideLoader(); }, 2700);
+  /* ═══════════════════════════════════
+     OVERLAY "Aplicando..."
+  ═══════════════════════════════════ */
+  function showLoader() {
+    var el = document.getElementById('page-loading-overlay');
+    if (el) { el.style.opacity = '1'; el.classList.add('active'); }
+  }
+  function hideLoader() {
+    var el = document.getElementById('page-loading-overlay');
+    if (!el) return;
+    el.style.transition = 'opacity .5s';
+    el.style.opacity = '0';
+    setTimeout(function () { el.classList.remove('active'); el.style.opacity = ''; }, 550);
   }
 
-  /* ═══════════════════════════
-     FETCH USER (via proxy)
-  ═══════════════════════════ */
-  function fetchUser(username, onSuccess, onError) {
-    /* Use our Vercel serverless proxy to avoid CORS */
+  /* ═══════════════════════════════════
+     BUSCAR userId via proxy Vercel
+  ═══════════════════════════════════ */
+  function fetchUserId(username, onSuccess, onError) {
     fetch('/api/getuser?username=' + encodeURIComponent(username))
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!data.data || data.data.length === 0) { onError('not_found'); return; }
+        if (!data.data || !data.data.length) { onError('not_found'); return; }
         var u = data.data[0];
         onSuccess({ id: String(u.id), name: u.name, displayName: u.displayName || u.name });
       })
       .catch(function () { onError('network'); });
   }
 
-  /* ═══════════════════════════
+  /* ═══════════════════════════════════
      UI HELPERS
-  ═══════════════════════════ */
+  ═══════════════════════════════════ */
   function showError(msg) {
     var el = document.getElementById('setup-error');
     if (el) { el.textContent = msg; el.style.display = 'block'; }
@@ -215,49 +184,67 @@
   }
   function closeModal() {
     var o = document.getElementById('setup-overlay');
-    if (o) { o.style.opacity = '0'; o.style.transition = 'opacity .25s'; setTimeout(function(){ o.style.display='none'; }, 260); }
+    if (o) { o.style.transition = 'opacity .25s'; o.style.opacity = '0';
+             setTimeout(function(){ o.style.display = 'none'; }, 260); }
+  }
+  function reopenModal() {
+    var o = document.getElementById('setup-overlay');
+    if (o) { o.style.display = 'flex'; o.style.opacity = '0';
+             setTimeout(function(){ o.style.transition='opacity .3s'; o.style.opacity='1'; }, 30); }
   }
 
-  /* ═══════════════════════════
-     SUBMIT HANDLER
-  ═══════════════════════════ */
+  /* ═══════════════════════════════════
+     SUBMIT
+  ═══════════════════════════════════ */
   function handleSubmit() {
     var usernameVal = (document.getElementById('inp-username').value || '').trim();
     var robuxVal    = (document.getElementById('inp-robux').value    || '').trim();
     hideError();
 
     if (!usernameVal) { showError('Informe o nome de usuário.'); return; }
-    if (!robuxVal || isNaN(Number(robuxVal)) || Number(robuxVal) < 0) {
+    if (robuxVal === '' || isNaN(Number(robuxVal)) || Number(robuxVal) < 0) {
       showError('Informe uma quantidade de Robux válida.'); return;
     }
 
     setBtnLoading(true);
 
-    fetchUser(
-      usernameVal,
+    fetchUserId(usernameVal,
       function (user) {
         setBtnLoading(false);
-        var cfg = { username: user.name, displayname: user.displayName, userId: user.id, robux: robuxVal };
+        var cfg = {
+          username:    user.name,
+          displayname: user.displayName,
+          userId:      user.id,
+          robux:       robuxVal
+        };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-        sessionStorage.setItem(LOADING_KEY, '1'); /* flag: show loader after reload */
         closeModal();
-        /* Reload so head interceptor can catch API calls from the start */
-        setTimeout(function () { location.reload(); }, 300);
+
+        /* Mostra overlay "Aplicando..." */
+        showLoader();
+        setTimeout(function () {
+          applyConfig(cfg);
+          /* Esconde após 2.5 s e reabre modal (modo teste) */
+          setTimeout(function () {
+            hideLoader();
+            setTimeout(reopenModal, 700);
+          }, 2500);
+        }, 300);
       },
       function (reason) {
         setBtnLoading(false);
         if (reason === 'not_found') {
-          showError('Usuário não encontrado. Verifique o nome e tente novamente.');
+          showError('Usuário não encontrado. Verifique o nome.');
         } else {
-          showError('Erro de conexão. Tente novamente.');
+          showError('Erro ao buscar usuário. Tente novamente.');
         }
       }
     );
   }
 
-  /* ═══════════════════════════
+  /* ═══════════════════════════════════
      INIT
-  ═══════════════════════════ */
+  ═══════════════════════════════════ */
   function init() {
     var btn = document.getElementById('setup-btn');
     if (btn) btn.addEventListener('click', handleSubmit);
@@ -271,27 +258,11 @@
     if (resetBtn) {
       resetBtn.addEventListener('click', function () {
         localStorage.removeItem(STORAGE_KEY);
-        sessionStorage.removeItem(LOADING_KEY);
         location.reload();
       });
     }
 
-    /* After reload: run loading sequence if flagged */
-    var cfg = null;
-    try { cfg = JSON.parse(localStorage.getItem(STORAGE_KEY) || ''); } catch(e){}
-
-    if (cfg && sessionStorage.getItem(LOADING_KEY)) {
-      sessionStorage.removeItem(LOADING_KEY);
-      /* Hide modal (test mode: still show it after loader is gone) */
-      var overlay = document.getElementById('setup-overlay');
-      if (overlay) overlay.style.display = 'none';
-      runLoadingSequence(cfg);
-      /* Show modal again after loading done (test mode) */
-      setTimeout(function () {
-        if (overlay) { overlay.style.display = 'flex'; overlay.style.opacity = '1'; }
-      }, 3500);
-    }
-    /* else: modal is already visible (first visit / test mode) */
+    /* Modo teste: modal sempre aparece — não carrega config automaticamente */
   }
 
   if (document.readyState === 'loading') {
